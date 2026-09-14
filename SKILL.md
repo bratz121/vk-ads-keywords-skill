@@ -67,6 +67,8 @@ description: >
   [references/wordstat.md](references/wordstat.md).
 - Правила категорий, смысла, мусора и расширения —
   [references/selection-rules.md](references/selection-rules.md). Прочитать перед шагом 1.
+- [AGENTS.md](AGENTS.md) — та же методичка без привязки к Claude (для Codex и других
+  агентов); полезна и здесь, если Chrome-инструментов нет — там путь «пользователь-курьер».
 
 ### Замер (нужен на шагах 2, 3 и 4)
 
