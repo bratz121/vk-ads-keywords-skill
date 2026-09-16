@@ -288,6 +288,24 @@ class ProjectTest(unittest.TestCase):
         self.assertIsNotNone(phrases["увеличить доход"]["checked"])
         self.assertIsNone(phrases["финансы семинар"]["checked"])
 
+    def test_phrase_frequencies_feed_the_final_table(self):
+        self.add("бизнес обучение\nшкола бизнеса\n")
+        self.measure(500)
+        self.check_all()
+        self.ok("cleaned", self.project, "--note", "чисто")
+        self.ok("js", self.project, "--no-group", "--phrases")
+        pending = self.pending()
+        kinds = {item["kind"] for item in pending["items"]}
+        self.assertEqual(kinds, {"phrase"})
+        totals = {item["id"]: 300 + i for i, item in enumerate(pending["items"])}
+        output = self.ok("record", self.project, stdin=self.result(totals))
+        self.assertIn("ЧАСТОТЫ ФРАЗ", output)
+        phrases = {p["text"]: p for p in self.state()["phrases"] if p["status"] == "active"}
+        self.assertEqual(sorted(p["freq"]["total"] for p in phrases.values()), [300, 301])
+        report = self.ok("export", self.project, "--draft")
+        self.assertIn("| Ключ | Запросов/30 дней |", report)
+        self.assertIn("| бизнес обучение | 30", report)
+
     def test_candidates_are_new_bases_only(self):
         self.add("бизнес обучение\n")
         self.ok("minus", self.project, "add", stdin="вакансии\n")

@@ -949,6 +949,18 @@ def cmd_js(args):
             raise Fail(f"проба длиннее {MAX_EXPR_CHARS} символов")
         items.append({"id": f"p{index}", "kind": "probe", "expr": expr, "rows": PROBE_ROWS,
                       "similar": SIMILAR_ROWS})
+    if getattr(args, "phrases", False):
+        # Per-key frequency for the final table: each phrase alone plus the shared minus words —
+        # the same match a VK Ads key gets. Rows are not needed, only the total.
+        wanted = active(state)
+        if getattr(args, "category", None):
+            wanted = category_phrases(state, args.category)
+            if not wanted:
+                raise Fail(f"в категории «{args.category}» нет фраз")
+        for index, phrase in enumerate(wanted, 1):
+            items.append({"id": f"f{index}", "kind": "phrase", "key": phrase["key"],
+                          "text": phrase["text"], "expr": expression([phrase["text"]], minus_words),
+                          "rows": 0, "similar": 0})
     if not items:
         raise Fail("нечего измерять: нет ни фраз, ни проб")
     state["seq"] += 1
@@ -1067,9 +1079,18 @@ def cmd_record(args):
                        f"{len(group['minus'])} минус)")
     elif group_items:
         problems.append("замер списка неполный — число списка не записано")
-    recorded_categories, probes = [], []
+    recorded_categories, probes, freqs = [], [], []
+    by_key = {p["key"]: p for p in active(state)}
     for item in pending["items"]:
         if item["id"] not in good or item["kind"] == "group":
+            continue
+        if item["kind"] == "phrase":
+            # Frequency lands on the phrase itself; evidence/rN.json keeps the raw answer.
+            phrase = by_key.get(item["key"])
+            if phrase is not None:
+                phrase["freq"] = {"total": good[item["id"]]["total"],
+                                  "request": pending["request_id"], "at": now()}
+                freqs.append((phrase["text"], good[item["id"]]["total"]))
             continue
         measurement = new_measurement(state, pending, data, item["kind"], [good[item["id"]]])
         measurement.update(exact=True, total=good[item["id"]]["total"], expr=item["expr"], item=item["id"])
@@ -1079,6 +1100,8 @@ def cmd_record(args):
         else:
             probes.append(measurement)
         state["measurements"].append(measurement)
+    if freqs:
+        journal(state, f"частоты фраз: {len(freqs)} шт ({pending['request_id']})")
     pending["consumed"] = True
     write_json(pending_path, pending)
     save(root, state)
@@ -1109,6 +1132,10 @@ def cmd_record(args):
         if probe["similar"]:
             say("  похожие:")
             show_rows(state, probe["similar"], SHOW_SIMILAR_ROWS)
+    if freqs:
+        say(f"\nЧАСТОТЫ ФРАЗ ({len(freqs)}; с общими минус-словами, за 30 дней):")
+        for text, value in sorted(freqs, key=lambda pair: -pair[1]):
+            say(f"  {num(value):>9}  {text}")
     say("\nДальше: " + status_line(state))
     if problems:
         return 2
@@ -1283,10 +1310,17 @@ def build_report(state, final):
         lines.append(f"- {name}: {count} фраз, {total_text(m) if m else 'не измерена'} запросов")
     for name in categories_in_use(state):
         definition = state["categories"].get(name, {}).get("definition")
-        phrases = [p["text"] for p in category_phrases(state, name)]
+        entries = category_phrases(state, name)
         lines += ["", f"Категория «{name}»" + (f" — {definition}" for _ in [0]).__next__() if definition
                   else f"Категория «{name}»"]
-        lines += ["```text", *phrases, "```"]
+        if any(p.get("freq") for p in entries):
+            # The media-buyer table: key + its own frequency (shared minus words applied).
+            lines += ["", "| Ключ | Запросов/30 дней |", "|---|---|"]
+            order = sorted(entries, key=lambda p: -(p.get("freq") or {}).get("total", -1))
+            lines += [f"| {p['text']} | {num(p['freq']['total']) if p.get('freq') else '—'} |"
+                      for p in order]
+        else:
+            lines += ["```text", *(p["text"] for p in entries), "```"]
     lines += ["", f"Минус-слова ({len(minus)}), общие для всех категорий:", "```text",
               *(minus or ["— нет —"]), "```", ""]
     if measurement:
@@ -1436,6 +1470,9 @@ def build_parser():
     p.add_argument("--probe", action="append", help="доп. выражение для пробы (можно несколько)")
     p.add_argument("--probes", action="store_true", help="пробы из stdin/--in, по одной на строку")
     p.add_argument("--no-group", action="store_true", help="только пробы, без замера списка")
+    p.add_argument("--phrases", action="store_true",
+                   help="частота каждой фразы отдельно (для итоговой таблицы «ключ — запросов»)")
+    p.add_argument("--category", help="с --phrases: мерить только фразы этой категории")
 
     command("record", cmd_record, "записать результат get_page_text", reads=True)
 
