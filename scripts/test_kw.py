@@ -271,6 +271,23 @@ class ProjectTest(unittest.TestCase):
         self.assertEqual((forked["measurements"], forked["cleaned"]), ([], None))
         self.assertEqual(self.run_kw("fork", self.project, copy, "--region-id", "225", "--region", "Россия")[0], 2)
 
+    def test_rewrite_shortens_wording_and_tracks_signature(self):
+        self.add("как увеличить доход\nсеминар по личным финансам\nбизнес обучение\n")
+        self.measure(500)
+        self.check_all()
+        output = self.ok("rewrite", self.project, stdin=(
+            "как увеличить доход => увеличить доход\n"
+            "семинар по личным финансам => финансы семинар\n"
+            "бизнес обучение => бизнес\n"))
+        self.assertIn("Переписано: 2", output)
+        self.assertIn("меньше двух значимых слов", output)
+        phrases = {p["text"]: p for p in self.state()["phrases"] if p["status"] == "active"}
+        self.assertIn("увеличить доход", phrases)
+        self.assertIn("финансы семинар", phrases)
+        # same signature keeps the audit mark; dropped word resets it
+        self.assertIsNotNone(phrases["увеличить доход"]["checked"])
+        self.assertIsNone(phrases["финансы семинар"]["checked"])
+
     def test_candidates_are_new_bases_only(self):
         self.add("бизнес обучение\n")
         self.ok("minus", self.project, "add", stdin="вакансии\n")

@@ -755,6 +755,57 @@ def cmd_move(args):
         say(f"  - {raw} — нет среди фраз в работе")
 
 
+def cmd_rewrite(args):
+    """Rewrite phrase wording (`старая => новая`): the shorter form is what goes to VK Ads."""
+    state = load(args.project)
+    rewritten, changed_sig, skipped = [], [], []
+    for raw in read_lines(args):
+        if "=>" not in raw:
+            skipped.append((raw, "нет разделителя =>"))
+            continue
+        old_raw, new_raw = (part.strip() for part in raw.split("=>", 1))
+        new_text = normalize(new_raw)
+        if not new_text:
+            skipped.append((raw, "новая формулировка пуста"))
+            continue
+        phrase = find_active(state, old_raw)
+        if phrase is None:
+            skipped.append((old_raw, "нет среди фраз в работе"))
+            continue
+        new_key = key_of(new_text)
+        if len(sig(new_key)) < 2:
+            skipped.append((old_raw, "в новой форме меньше двух значимых слов"))
+            continue
+        if new_key != phrase["key"]:
+            clash = next((p for p in active(state) if p is not phrase and p["key"] == new_key), None)
+            if clash is not None:
+                skipped.append((old_raw, f"новая форма совпадает с «{clash['text']}»"))
+                continue
+            words = sig(new_key)
+            cover = covering(state, words, exclude=phrase)
+            if cover is not None:
+                skipped.append((old_raw, f"новую форму поглощает «{cover['text']}»"))
+                continue
+        old_text = phrase["text"]
+        same_sig = new_key == phrase["key"]
+        phrase["text"] = new_text
+        if not same_sig:
+            phrase["key"] = new_key
+            phrase["checked"] = None
+            changed_sig.append(new_text)
+        rewritten.append((old_text, new_text))
+    journal(state, f"переписано формулировок: {len(rewritten)}")
+    save(args.project, state)
+    say(f"Переписано: {len(rewritten)}")
+    for old_text, new_text in rewritten:
+        say(f"  {old_text} => {new_text}")
+    if changed_sig:
+        say(f"У {len(changed_sig)} фраз изменился набор значимых слов: другой охват — нужен новый замер, "
+            f"аудит двойного смысла сброшен")
+    for raw, why in skipped:
+        say(f"  - {raw} — {why}")
+
+
 def cmd_category(args):
     state = load(args.project)
     if args.rename:
@@ -1358,6 +1409,9 @@ def build_parser():
 
     p = command("move", cmd_move, "перенести фразы в другую категорию", reads=True)
     p.add_argument("--category", required=True)
+
+    command("rewrite", cmd_rewrite, "переписать формулировки (строки «старая => новая»): "
+            "короче фраза — шире охват VK Ads", reads=True)
 
     p = command("category", cmd_category, "определение и статус категории")
     p.add_argument("name")
