@@ -74,15 +74,26 @@ cp prompts/vk-ads-keywords.md ~/.codex/prompts/vk-ads-keywords.md
 
 ### Claude Code
 
-Скопируй папку целиком в каталог скилов — она уже готовый скил:
+Клонируй репо прямо в каталог скилов — папка и есть готовый скил:
 ```bash
-git clone https://github.com/bratz121/vk-ads-keywords-skill.git
-cp -r vk-ads-keywords-skill ~/.claude/skills/vk-ads-keywords
+git clone https://github.com/bratz121/vk-ads-keywords-skill.git ~/.claude/skills/vk-ads-keywords
 ```
-Windows: `C:\Users\<имя>\.claude\skills\vk-ads-keywords`. Скил подхватится в новой сессии.
-Дальше `/vk-ads-keywords <тема>, <город>` или просто «подбери ключевые фразы для VK Ads
-под …». С расширением **Claude in Chrome** (вход в Яндекс в этом Chrome) агент меряет
-Вордстат сам — путь A; без расширения работает тот же путь B, что и в Codex.
+Windows (PowerShell): `git clone https://github.com/bratz121/vk-ads-keywords-skill.git "$env:USERPROFILE\.claude\skills\vk-ads-keywords"`.
+Скил подхватится в новой сессии. Дальше `/vk-ads-keywords <тема>, <город>` или просто
+«подбери ключевые фразы для VK Ads под …». С расширением **Claude in Chrome** (вход в
+Яндекс в этом Chrome) агент меряет Вордстат сам — путь A; без расширения работает тот же
+путь B, что и в Codex.
+
+### Обновление
+
+Установка git-клоном обновляется одной командой (и для Codex-папки, и для скила Claude Code):
+```bash
+git -C ~/.claude/skills/vk-ads-keywords pull
+```
+Windows: `git -C "$env:USERPROFILE\.claude\skills\vk-ads-keywords" pull`. Изменения
+подхватятся в новой сессии. Если скил ставился копированием папки без `.git` — один раз
+переустанови клоном по команде выше (старую папку удалить), дальше только `pull`.
+Слэш-команда Codex обновляется перекопированием: `cp prompts/vk-ads-keywords.md ~/.codex/prompts/`.
 
 ## Что получается на выходе
 
